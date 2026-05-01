@@ -17,10 +17,10 @@ The switch serves as the physical network backbone for a personal cybersecurity 
 | Item | Value |
 |---|---|
 | Hardware | Cisco Catalyst 3560-CX Series |
-| IOS Mode | Rapid-PVST |
+| Spanning-Tree Mode | Rapid-PVST |
 | Starting State | Factory wiped |
 | Management IP | 192.168.99.1 |
-| Console Access | PuTTY via COM3, 9600 baud |
+| Console Access | PuTTY via COM3, 9600 8N1, no flow control |
 
 ---
 
@@ -49,6 +49,8 @@ The switch serves as the physical network backbone for a personal cybersecurity 
 
 ## Configuration
 
+> All configuration blocks below assume global configuration mode (`configure terminal`).
+
 ### 1. VLAN Segmentation
 
 ```
@@ -62,7 +64,7 @@ vlan 99
 
 **Security reasoning:** VLAN 1 is the default on all Cisco switches and a known target for VLAN hopping attacks. Moving all traffic to named VLANs and leaving VLAN 1 empty eliminates default-tagged traffic that could be exploited.
 
-![VLAN Brief](screenshots/03-vlan-brief.png)
+![VLAN Brief](cisco-3560cx-network-lab/screenshots/03-vlan-brief.png)
 
 ---
 
@@ -89,7 +91,7 @@ interface range Gi0/10 - 12
 
 **Security reasoning:** Unused ports are assigned to MGMT then administratively shut down. An attacker with physical access cannot plug into an active port and get uncontrolled network access.
 
-![Ports Assigned](screenshots/04-ports-assigned.png)
+![Ports Assigned](cisco-3560cx-network-lab/screenshots/04-ports-assigned.png)
 
 ---
 
@@ -99,19 +101,19 @@ interface range Gi0/10 - 12
 interface vlan 99
  ip address 192.168.99.1 255.255.255.0
  no shutdown
-
 ip default-gateway 192.168.99.254
 ```
 
 **Security reasoning:** Management traffic is isolated to its own VLAN. Neither SECURE nor VULN-LAB devices can reach the management plane without explicit ACL permission. This is out-of-band management and is standard enterprise hardening practice.
 
-![Management SVI](screenshots/05-mgmt-svi.png)
+![Management SVI](cisco-3560cx-network-lab/screenshots/05-mgmt-svi.png)
 
 ---
 
 ### 4. Port Security
 
 **SECURE zone — Gi0/1-4 (max 1 MAC, Shutdown on violation):**
+
 ```
 interface range Gi0/1 - 4
  switchport port-security
@@ -121,6 +123,7 @@ interface range Gi0/1 - 4
 ```
 
 **VULN-LAB zone — Gi0/5-8 (max 2 MACs, Restrict on violation):**
+
 ```
 interface range Gi0/5 - 8
  switchport port-security
@@ -139,7 +142,7 @@ interface range Gi0/5 - 8
 
 **Security reasoning:** SECURE ports use Shutdown because any unauthorized device on a trusted port is treated as a critical incident. VULN-LAB ports use Restrict to accommodate a VM host plus guest VM (maximum 2 MACs) while still logging violations. Sticky MAC automatically learns and locks the first MAC address that connects, persisting to running config without manual entry.
 
-![Port Security](screenshots/07-port-security.png)
+![Port Security](cisco-3560cx-network-lab/screenshots/07-port-security.png)
 
 ---
 
@@ -161,7 +164,7 @@ interface range Gi0/1 - 8
 
 **Security reasoning:** An attacker who plugs a rogue switch into an access port can win the STP root bridge election and become the center of the network, enabling traffic interception. BPDUGuard shuts the port the moment any STP packet arrives, eliminating that attack vector entirely.
 
-![STP Hardening](screenshots/08-stp-hardening.png)
+![STP Hardening](cisco-3560cx-network-lab/screenshots/08-stp-hardening.png)
 
 ---
 
@@ -185,9 +188,9 @@ ip routing
 | 20 | Deny | VULN-LAB | MGMT | Lab machines cannot access switch management |
 | 30 | Permit | VULN-LAB | Any | Internet access for updates and lab connectivity |
 
-**Security reasoning:** The ACL is applied inbound on VLAN 20, filtering traffic as it leaves the VULN-LAB zone before it can be routed anywhere. Cisco ACLs include an implicit deny all at the bottom, so Rule 30 must exist or all VULN-LAB internet traffic would be silently blocked.
+**Security reasoning:** The ACL is applied inbound on the VLAN 20 SVI, filtering traffic from VULN-LAB hosts before it can be routed to other VLANs. Cisco ACLs include an implicit deny all at the bottom, so Rule 30 must exist or all VULN-LAB internet traffic would be silently blocked.
 
-![ACL Config](screenshots/10-acl-vuln-lab.png)
+![ACL Config](cisco-3560cx-network-lab/screenshots/10-acl-vuln-lab.png)
 
 ---
 
@@ -201,7 +204,8 @@ show ip access-lists
 show ip interface brief
 ```
 
-![Final Verification](screenshots/11-final-verification.png)
+![Final Verification](cisco-3560cx-network-lab/screenshots/11-final-verification.png)
+![Final Verification (continued)](cisco-3560cx-network-lab/screenshots/11-final-verification-2.png)
 
 ---
 
@@ -233,22 +237,27 @@ show ip interface brief
 | `08-stp-hardening.png` | STP features enabled |
 | `09-final-save.png` | Final save confirmation |
 | `10-acl-vuln-lab.png` | ACL rules verified |
-| `11-final-verification.png` | Full end-to-end proof |
+| `11-final-verification.png` | Full end-to-end proof (part 1) |
+| `11-final-verification-2.png` | Full end-to-end proof (part 2) |
 
 ---
 
 ## Key Commands
 
 ```bash
-show vlan brief                              # Verify VLANs and port assignments
-show port-security                           # Verify port security and violations
-show spanning-tree summary                   # Verify STP hardening features
-show ip access-lists                         # Verify ACL rules
-show ip interface brief                      # Verify interface IPs and states
-show running-config                          # View full running config
-write memory                                 # Save config to NVRAM
+show vlan brief              # Verify VLANs and port assignments
+show port-security           # Verify port security and violations
+show spanning-tree summary   # Verify STP hardening features
+show ip access-lists         # Verify ACL rules
+show ip interface brief      # Verify interface IPs and states
+show running-config          # View full running config
+write memory                 # Save config to NVRAM
+```
 
-# Re-enable a port shut down by port security
+**Re-enable a port shut down by port security:**
+
+```
+configure terminal
 interface Gi0/X
  shutdown
  no shutdown
@@ -268,4 +277,4 @@ interface Gi0/X
 
 ## Related Projects
 
-- [DVWA Vulnerability Lab](https://github.com/ConnorrArnold/aws-ec2-dvwa-vuln-lab) — The VULN-LAB VLAN was built specifically to isolate this lab's attack environment from trusted devices
+- [DVWA Vulnerability Lab](https://github.com/ConnorrArnold/aws-ec2-dvwa-vuln-lab) — The VULN-LAB VLAN was built specifically to isolate this lab's attack environment from trusted devices.
